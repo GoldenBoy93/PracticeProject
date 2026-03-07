@@ -412,3 +412,274 @@ private async UniTask FillEmptySpaces()
 </details> <!-- ThreeMatchPuzzle 전체 접기 -->
 
 ---
+
+# [04. FlappyBrid]
+<details> <!-- FlappyBrid 전체 접기 -->
+<summary> FlappyBrid 펼치기 / 접기 </summary>
+
+![VideoProject4-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/d2f50159-48e7-41b4-b4c2-168f24ef1c29)
+
+주요코드
+<details> <!-- FlappyBrid 코드1 접기 -->
+<summary> FllowCamera </summary>
+
+<pre>csharp
+    
+using UnityEngine;
+
+public class FllowCamera : MonoBehaviour
+{
+    [SerializeField] private GameObject _bird;
+
+    public void Initialize(GameObject bird)
+    {
+        _bird = bird;
+    }
+
+    private void Update()
+    {
+        // 자신의 위치를 bird와 동기화
+        if (_bird != null)
+        {
+            Vector3 birdPos = _bird.transform.position;
+            Vector3 newPos = new Vector3(birdPos.x, 0, -10); // x축만 동기화
+            transform.position = newPos;
+        }
+    }
+}
+</pre>
+
+</details> <!-- FlappyBrid 코드1 끝 -->
+
+<details> <!-- FlappyBrid 코드2 시작 -->
+<summary> Bird </summary> <!-- FlappyBrid 코드2 제목 -->
+
+<pre>csharp
+
+using UnityEngine;
+
+public class Bird : MonoBehaviour
+{
+    [SerializeField] private Rigidbody2D _rb;
+    [SerializeField] private LayerMask _obstacleLayer; // 비트단위
+
+    [SerializeField] private float _goSpeed = 1.0f;
+    [SerializeField] private float _jumpPower = 1.0f;
+
+    public Rigidbody2D RB
+    {
+        get { return _rb; }
+        set { _rb = value; }
+    }
+
+    private void Awake()
+    {
+        _rb = GetComponent<Rigidbody2D>();
+        _rb.gravityScale = 0;
+    }
+
+    private void Update()
+    {
+        // 게임중일경우
+        if (FlappyBird.Instance.IsPlaying)
+        {
+            Vector3 goDir = new Vector3(_goSpeed, 0,0);
+            transform.position += goDir * Time.deltaTime;
+
+            // 마우스 좌클릭시
+            if (Input.GetMouseButtonDown(0))
+            {
+                Jump();
+            }
+        }
+    }
+
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        // 닿은 대상의 레이어를 비트 단위로 변환
+        LayerMask hitLayer = 1 << collision.gameObject.layer;
+
+        Debug.Log($"[Bird] HitLayer : {hitLayer.value}");
+
+        // 장애물이 아닐경우 종료
+        if (hitLayer != _obstacleLayer) return;
+
+        // 게임오버
+        FlappyBird.Instance.GameOver();
+    }
+
+    public void Jump()
+    {
+        _rb.linearVelocity = new Vector2(_rb.linearVelocity.x, _jumpPower);
+    }
+}
+    
+</pre>
+
+</details> <!-- FlappyBrid 코드2 끝 -->
+
+<details>
+
+<summary> Obstacle </summary>
+
+<pre>csharp
+
+using UnityEngine;
+
+public class Obstacle : MonoBehaviour
+{
+    [SerializeField] private LayerMask _targetLayer;
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        // 닿은 대상의 레이어를 비트로 변환
+        LayerMask hitlayer = 1 << collision.gameObject.layer;
+
+        // 대상인지 확인
+        if (hitlayer == _targetLayer)
+        {
+            Debug.Log($"[Obstacle] Bird 감지.");
+
+            // 새로운 장애물을 생성하라고 매니저에게 요청
+            FlappyBird.Instance.InitObstacles();
+        }
+        else
+        {
+            Debug.Log($"[Obstacle] Bird 아님.");
+        }
+    }
+}
+    
+</pre>
+
+</details>
+
+<details>
+<summary> FlappyBird (GameManager) </summary>
+
+<pre>csharp
+
+using System.Collections.Generic;
+using Unity.VisualScripting;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class FlappyBird : MonoBehaviour
+{
+    private static FlappyBird _instance;
+    public static FlappyBird Instance => _instance;
+
+    [SerializeField] private Camera _camera;
+    [SerializeField] private GameObject _flappyBirdPrefab;
+    [SerializeField] private List<GameObject> _obstaclePrefabs;
+    [SerializeField] private GameObject _obstacleDeck;
+    [SerializeField] private Vector2 _centerPosition = new Vector2(0,0);
+    [SerializeField] private Button _startButton;
+    [SerializeField] private Button _reStartButton;
+
+    [SerializeField] private Bird _bird;
+    [SerializeField] private bool _isPlaying = false;
+    public bool IsPlaying => _isPlaying;
+
+    private void Awake()
+    {
+        // SingleTon
+        if (_instance == null)
+        {
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+
+        // 게임 초기 설정
+        _isPlaying = false;
+
+        // 버드 프리펩 생성
+        if (_bird == null && _flappyBirdPrefab != null)
+        {
+            GameObject birdPrefab = Instantiate(_flappyBirdPrefab);
+            birdPrefab.transform.position = _centerPosition;
+            _bird = birdPrefab.GetComponent<Bird>();
+        }
+
+        // Fllow Camera 세팅
+        if (_camera == null)
+        {
+            _camera = Camera.main;
+            FllowCamera fllowCamera = _camera.AddComponent<FllowCamera>();
+            fllowCamera.Initialize(_bird.gameObject);
+        }
+
+        // Start Button 이벤트 연결
+        if (_startButton != null)
+        {
+            // 버튼에 호출할 함수 연결
+            _startButton.onClick.AddListener(StartGame);
+            _reStartButton.onClick.AddListener(StartGame);
+            _reStartButton.gameObject.SetActive(false);
+        }
+    }
+
+    // 게임스타트 버튼을 누를시 시작
+    public void StartGame()
+    {
+        Debug.Log($"게임시작");
+
+        // '게임중'으로 설정 전환
+        _isPlaying = true;
+
+        // bird 원위치
+        _bird.gameObject.transform.position = _centerPosition;
+
+        // 버드에게 중력 적용
+        _bird.RB.gravityScale = 1;
+
+        // 버튼 비활성화
+        _startButton.gameObject.SetActive(false);
+        _reStartButton.gameObject.SetActive(false);
+
+        // 최초 장애물 생성
+        InitObstacles();
+    }
+
+    public void GameOver()
+    {
+        Debug.Log($"게임종료");
+
+        // '비게임중'으로 설정 전환
+        _isPlaying = false;
+        
+        // 버드에게 중력 중지
+        _bird.RB.gravityScale = 0;
+
+        // 다시 시작 버튼 활성화
+        _reStartButton.gameObject.SetActive(true);
+    }
+
+    // Obstacle의 CollisionEnter2D에서 호출할 함수
+    public void InitObstacles()
+    {
+        // 랜덤 obstacle 선택
+        int randomIdx = Random.Range(0, _obstaclePrefabs.Count);
+
+        // 랜덤 높이 선택 (obstacle이 설치될 위아래 높이)
+        int randomHeight = Random.Range(-2, 2);
+
+        // bird 위치를 가져와서 obstacle 생성 위치를 계산
+        Vector2 birdPos = _bird.transform.position;
+        Vector2 initPos = birdPos + new Vector2(8, randomHeight);
+
+        // obstacle 생성
+        GameObject newObstacle = Instantiate(_obstaclePrefabs[randomIdx], _obstacleDeck.transform);
+        newObstacle.transform.position = initPos;
+    }
+}
+    
+</pre>
+    
+</details>
+
+</details> <!-- FlappyBrid 전체 끝 -->
